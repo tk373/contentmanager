@@ -1,5 +1,7 @@
 const {onCall, onRequest} = require("firebase-functions/v2/https");
 const {onDocumentWritten} = require("firebase-functions/v2/firestore");
+const {onSchedule} = require("firebase-functions/v2/scheduler");
+const {defineSecret} = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 const {TwitterApi} = require("twitter-api-v2");
@@ -7,27 +9,32 @@ const CryptoJS = require("crypto-js");
 
 admin.initializeApp();
 
-// Encryption key for decrypting user credentials
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
+// Define the secret for v2 functions
+const encryptionKeySecret = defineSecret("ENCRYPTION_KEY");
 
 // Utility function to decrypt settings
 const decryptSettings = (encryptedSettings) => {
-  if (!ENCRYPTION_KEY) {
+  if (!encryptionKeySecret.value()) {
     throw new Error('Encryption key not configured');
+  }
+  if (encryptedSettings === undefined) {
+    throw new Error('Encrypted settings are undefined');
   }
   
   return {
-    apiKey: CryptoJS.AES.decrypt(encryptedSettings.apiKey, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8),
-    apiSecret: CryptoJS.AES.decrypt(encryptedSettings.apiSecret, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8),
-    accessToken: CryptoJS.AES.decrypt(encryptedSettings.accessToken, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8),
-    accessTokenSecret: CryptoJS.AES.decrypt(encryptedSettings.accessTokenSecret, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8),
+    apiKey: CryptoJS.AES.decrypt(encryptedSettings.apiKey, encryptionKeySecret.value()).toString(CryptoJS.enc.Utf8),
+    apiSecret: CryptoJS.AES.decrypt(encryptedSettings.apiSecret, encryptionKeySecret.value()).toString(CryptoJS.enc.Utf8),
+    accessToken: CryptoJS.AES.decrypt(encryptedSettings.accessToken, encryptionKeySecret.value()).toString(CryptoJS.enc.Utf8),
+    accessTokenSecret: CryptoJS.AES.decrypt(encryptedSettings.accessTokenSecret, encryptionKeySecret.value()).toString(CryptoJS.enc.Utf8),
     bearerToken: encryptedSettings.bearerToken ? 
-      CryptoJS.AES.decrypt(encryptedSettings.bearerToken, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8) : null,
+      CryptoJS.AES.decrypt(encryptedSettings.bearerToken, encryptionKeySecret.value()).toString(CryptoJS.enc.Utf8) : null,
   };
 };
 
 // Function to post to X (Twitter)
-exports.postToX = onCall(async (request) => {
+exports.postToX = onCall({
+  secrets: [encryptionKeySecret]
+}, async (request) => {
   try {
     const {postId, content} = request.data;
     const userId = request.auth.uid;
@@ -99,7 +106,9 @@ exports.postToX = onCall(async (request) => {
 });
 
 // Function to test X API connection
-exports.testXConnection = onCall(async (request) => {
+exports.testXConnection = onCall({
+  secrets: [encryptionKeySecret]
+}, async (request) => {
   try {
     const userId = request.auth.uid;
 
@@ -141,8 +150,12 @@ exports.testXConnection = onCall(async (request) => {
   }
 });
 
-// Scheduled function to process scheduled posts
-exports.processScheduledPosts = onRequest(async (req, res) => {
+// Scheduled function to process scheduled posts - runs every 30 minutes
+exports.processScheduledPosts = onSchedule({
+  schedule: "every 30 minutes",
+  timeZone: "UTC",
+  secrets: [encryptionKeySecret]
+}, async (event) => {
   try {
     const now = admin.firestore.Timestamp.now();
     
@@ -215,18 +228,16 @@ exports.processScheduledPosts = onRequest(async (req, res) => {
       }
     }
 
-    res.json({
+    logger.info(`Processed ${results.length} scheduled posts`);
+    return {
       success: true,
       processed: results.length,
       results
-    });
+    };
 
   } catch (error) {
     logger.error('Error processing scheduled posts:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    throw error;
   }
 });
 
