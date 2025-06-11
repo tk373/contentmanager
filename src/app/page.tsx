@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -14,9 +13,10 @@ import Link from 'next/link';
 
 export default function Home() {
   const { user, loading: authLoading } = useAuth();
-  const { posts, loading: postsLoading, refetch } = usePosts();
+  const { posts, loading: postsLoading, refetch, deletePost } = usePosts();
   const { settings } = useSettings();
   const [postingToX, setPostingToX] = useState<{[key: string]: boolean}>({});
+  const [deletingPost, setDeletingPost] = useState<string | null>(null);
 
   const handlePostToX = async (postId: string, content: string) => {
     setPostingToX(prev => ({ ...prev, [postId]: true }));
@@ -32,6 +32,17 @@ export default function Home() {
       alert(`Failed to post to X: ${error.message}`);
     } finally {
       setPostingToX(prev => ({ ...prev, [postId]: false }));
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    if (window.confirm('Are you sure you want to delete this post?')) {
+      try {
+        await deletePost(postId);
+      } catch (error: any) {
+        console.error('Error deleting post:', error);
+        alert(`Failed to delete post: ${error.message}`);
+      }
     }
   };
 
@@ -131,6 +142,13 @@ export default function Home() {
                         {postingToX[post.id] ? 'Posting...' : 'Post to X'}
                       </button>
                     )}
+                    
+                    <button
+                      onClick={() => handleDeletePost(post.id)}
+                      className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm font-medium disabled:opacity-50"
+                    >
+                      Delete
+                    </button>
                     
                     {post.status === 'posted' && (
                       <span className="text-green-600 text-sm">✅ Posted to X</span>

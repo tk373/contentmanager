@@ -8,7 +8,9 @@ import {
   query, 
   orderBy, 
   where,
-  Timestamp 
+  Timestamp,
+  doc,
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -74,6 +76,18 @@ export const usePosts = () => {
     }
   };
 
+  const deletePost = async (postId: string) => {
+    if (!user) return;
+
+    try {
+      await deleteDoc(doc(db, 'posts', postId));
+      await fetchPosts(); // Refresh the posts list
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      throw error;
+    }
+  };
+
   useEffect(() => {
     if (user) {
       fetchPosts();
@@ -83,5 +97,5 @@ export const usePosts = () => {
     }
   }, [user]);
 
-  return { posts, loading, addPost, refetch: fetchPosts };
+  return { posts, loading, addPost, deletePost, refetch: fetchPosts };
 }; 
