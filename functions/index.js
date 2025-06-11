@@ -152,7 +152,7 @@ exports.testXConnection = onCall({
 
 // Scheduled function to process scheduled posts - runs every 30 minutes
 exports.processScheduledPosts = onSchedule({
-  schedule: "every 30 minutes",
+  schedule: "every 2 hours",
   timeZone: "UTC",
   secrets: [encryptionKeySecret]
 }, async (event) => {
